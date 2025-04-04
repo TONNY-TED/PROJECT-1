@@ -1,0 +1,432 @@
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+from datetime import datetime
+from tkcalendar import DateEntry
+import csv
+
+
+class FinanceTrackerApp:
+    def __init__(self, root):
+        self.root = root
+        self.setup_app()
+        self.setup_csv_file()
+        self.setup_styles()
+        self.create_widgets()
+        self.load_data()
+
+    def setup_app(self):
+        self.root.title("(PROP INDUSTRIES) PERSONAL FINACE TRACKER ")
+        self.root.geometry("1000x800")
+        self.root.minsize(800, 600)
+
+        # Configure grid weights for root window
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+    def setup_csv_file(self):
+        self.filename = 'finance.csv'
+        # Check if file exists, if not create it with a header
+        try:
+            with open(self.filename, 'r') as f:
+                pass
+        except FileNotFoundError:
+            with open(self.filename, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["id", "amount", "category", "date", "type", "description"])
+
+    def setup_styles(self):
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+
+        # Color scheme
+        # Custom color scheme with red, black, white, and blue
+        self.colors = {
+            'primary': '#000000',  # Black for main elements
+            'secondary': '#1E3F66',  # Dark blue for secondary elements
+            'accent': '#3498DB',  # Bright blue for accents
+            'success': '#2ECC71',  # Green (kept for positive amounts)
+            'danger': '#E74C3C',  # Red for negative amounts/errors
+            'light': '#FFFFFF',  # White background
+            'dark': '#2C3E50',  # Dark blue-gray for dark elements
+            'text': '#000000',  # Black text
+            'highlight': '#E74C3C'  # Red for highlights
+
+        }
+
+        # Configure styles
+        self.style.configure('TFrame', background=self.colors['light'])
+        self.style.configure('TLabel', background=self.colors['light'], foreground=self.colors['text'])
+        self.style.configure('TButton', font=('Helvetica', 10), padding=5)
+        self.style.configure('Header.TLabel', font=('Helvetica', 14, 'bold'))
+        self.style.configure('Amount.TLabel', font=('Helvetica', 12, 'bold'))
+
+        # Treeview styles
+        self.style.configure('Treeview',
+                             font=('Helvetica', 10),
+                             rowheight=25,
+                             background=self.colors['light'],
+                             fieldbackground=self.colors['light'])
+        self.style.configure('Treeview.Heading',
+                             font=('Helvetica', 10, 'bold'),
+                             background=self.colors['primary'],
+                             foreground='white')
+        self.style.map('Treeview',
+                       background=[('selected', self.colors['accent'])])
+
+    def create_widgets(self):
+        # Main container - using grid for better resizing control
+        self.main_frame = ttk.Frame(self.root)
+        self.main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        # Configure grid weights for main frame
+        self.main_frame.grid_rowconfigure(0, weight=0)  # Input section
+        self.main_frame.grid_rowconfigure(1, weight=0)  # Summary section
+        self.main_frame.grid_rowconfigure(2, weight=1)  # Transactions section (gets extra space)
+        self.main_frame.grid_columnconfigure(0, weight=1)
+
+        # Create all sections
+        self.create_input_section()
+        self.create_summary_section()
+        self.create_transactions_section()
+
+    def create_input_section(self):
+        """Create the form for adding new transactions"""
+        frame = ttk.LabelFrame(
+            self.main_frame,
+            text="NEW TRANSACTION",
+            padding=(15, 10)
+        )
+        frame.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
+
+        # Configure grid weights for input frame
+        for i in range(5):  # 5 rows of inputs
+            frame.grid_rowconfigure(i, weight=1)
+        frame.grid_columnconfigure(1, weight=1)  # Make input fields expand
+
+        # Form fields
+        fields = [
+            ("AMOUNT (MK):", "amount", tk.Entry),
+            ("CATEGORY:", "category", ttk.Combobox,
+             {"values": ["Food", "Transport", "Housing", "Entertainment", "Bills", "Salary", "Other"]}),
+            ("DATA:", "date", DateEntry, {"date_pattern": "yyyy-mm-dd"}),
+            ("TYPE:", "type", ttk.Combobox, {"values": ["Income", "Expense"], "state": "readonly"}),
+            ("DESCRIPTION:", "description", tk.Entry)
+        ]
+
+        # Create form fields dynamically
+        for i, (label_text, attr_name, widget_class, *kwargs) in enumerate(fields):
+            kwargs = kwargs[0] if kwargs else {}
+
+            # Label
+            ttk.Label(frame, text=label_text).grid(row=i, column=0, sticky="w", pady=5, padx=5)
+
+            # Widget
+            widget = widget_class(frame, **kwargs)
+            widget.grid(row=i, column=1, sticky="ew", pady=5, padx=5)
+
+            # Store reference
+            setattr(self, f"{attr_name}_entry", widget)
+
+        # Set default values
+        self.date_entry.set_date(datetime.now())
+        self.type_entry.set("Expense")
+
+        # Add button
+        add_btn = ttk.Button(
+            frame,
+            text="Add Transaction",
+            command=self.add_transaction
+        )
+        add_btn.grid(row=len(fields), column=0, columnspan=2, pady=10, sticky="ew")
+
+    def add_transaction(self):
+        """Add a new transaction to the CSV file"""
+        try:
+            # Get values from form
+            amount = float(self.amount_entry.get())
+            category = self.category_entry.get()
+            date = self.date_entry.get()
+            transaction_type = self.type_entry.get()
+            description = self.description_entry.get()
+
+            # Validate
+            if not all([amount, category, date, transaction_type]):
+                raise ValueError("Please fill all required fields")
+
+            # Generate a new ID based on the current row count
+            with open(self.filename, 'r') as f:
+                reader = csv.reader(f)
+                next(reader)  # Skip header
+                rows = list(reader)
+                new_id = len(rows) + 1
+
+            # Insert into CSV
+            with open(self.filename, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([new_id, amount, category, date, transaction_type, description])
+
+            # Refresh UI
+            self.load_data()
+            self.clear_form()
+            messagebox.showinfo("Success", "Transaction added successfully!")
+
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    def clear_form(self):
+        """Clear the input form"""
+        self.amount_entry.delete(0, tk.END)
+        self.category_entry.set('')
+        self.date_entry.set_date(datetime.now())
+        self.type_entry.set("Expense")
+        self.description_entry.delete(0, tk.END)
+
+    def create_summary_section(self):
+        """Create the financial summary section"""
+        frame = ttk.LabelFrame(
+            self.main_frame,
+            text="📊 Financial Summary",
+            padding=(15, 10)
+        )
+        frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
+
+        # Configure grid weights
+        for i in range(3):  # 3 rows of summary info
+            frame.grid_rowconfigure(i, weight=1)
+        frame.grid_columnconfigure(1, weight=1)  # Make values expand
+
+        # Summary metrics
+        metrics = [
+            ("Total Income:", "income", self.colors['success']),
+            ("Total Expenses:", "expense", self.colors['danger']),
+            ("Net Balance:", "balance", self.colors['primary'])
+        ]
+
+        for i, (label_text, metric, color) in enumerate(metrics):
+            # Label
+            ttk.Label(frame, text=label_text, style='Header.TLabel').grid(
+                row=i, column=0, sticky="w", pady=5, padx=5)
+
+            # Value display
+            label = ttk.Label(frame, text="$0.00", style='Amount.TLabel')
+            label.grid(row=i, column=1, sticky="e", pady=5, padx=5)
+            setattr(self, f"{metric}_label", label)
+
+            # Set color
+            label.configure(foreground=color)
+
+    def create_transactions_section(self):
+        """Create the transaction history table with responsive sizing"""
+        frame = ttk.LabelFrame(
+            self.main_frame,
+            text="📋 Transaction History",
+            padding=(15, 10)
+        )
+        frame.grid(row=2, column=0, sticky="nsew")
+
+        # Configure grid weights for the frame
+        frame.grid_rowconfigure(0, weight=1)
+        frame.grid_columnconfigure(0, weight=1)
+
+        # Treeview with scrollbar
+        self.tree = ttk.Treeview(
+            frame,
+            columns=("id", "amount", "category", "date", "type", "description"),
+            show="headings",
+            selectmode="browse")
+
+        # Define columns with relative widths
+        columns = [
+            ("ID", "id", 0.05),  # 5% width
+            ("Amount", "amount", 0.1),  # 10% width
+            ("Category", "category", 0.15),  # 15% width
+            ("Date", "date", 0.1),  # 10% width
+            ("Type", "type", 0.1),  # 10% width
+            ("Description", "description", 0.5)  # 50% width
+        ]
+
+        for heading, col_id, width_ratio in columns:
+            self.tree.heading(col_id, text=heading)
+            self.tree.column(col_id, anchor="center", stretch=True)
+
+        # Add scrollbars
+        y_scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        x_scroll = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
+
+        # Grid layout with sticky on all sides
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll.grid(row=1, column=0, sticky="ew")
+
+        # Context menu
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Edit", command=self.edit_transaction)
+        self.context_menu.add_command(label="Delete", command=self.delete_transaction)
+        self.tree.bind("<Button-3>", self.show_context_menu)
+
+    def show_context_menu(self, event):
+        """Show context menu on right-click"""
+        self.context_menu.post(event.x_root, event.y_root)
+
+    def edit_transaction(self):
+        """Edit selected transaction"""
+        selected_item = self.tree.selection()
+        if selected_item:
+            item = self.tree.item(selected_item)
+            values = item['values']
+            transaction_id = values[0]
+
+            # Pre-fill the form with current values
+            self.amount_entry.delete(0, tk.END)
+            self.amount_entry.insert(0, values[1])
+
+            self.category_entry.set(values[2])
+            self.date_entry.set_date(values[3])
+            self.type_entry.set(values[4])
+            self.description_entry.delete(0, tk.END)
+            self.description_entry.insert(0, values[5])
+
+            # Change the button to update
+            self.add_button = ttk.Button(
+                self.main_frame,
+                text="Update Transaction",
+                command=lambda: self.update_transaction(transaction_id)
+            )
+            self.add_button.grid(row=6, column=0, columnspan=2, pady=10, sticky="ew")
+        else:
+            messagebox.showwarning("Select a Transaction", "Please select a transaction to edit.")
+
+    def update_transaction(self, transaction_id):
+        """Update the transaction in the CSV file"""
+        try:
+            amount = float(self.amount_entry.get())
+            category = self.category_entry.get()
+            date = self.date_entry.get()
+            transaction_type = self.type_entry.get()
+            description = self.description_entry.get()
+
+            # Validate
+            if not all([amount, category, date, transaction_type]):
+                raise ValueError("Please fill all required fields")
+
+            # Read data, update the selected transaction and rewrite the file
+            updated = False
+            rows = []
+            with open(self.filename, 'r') as f:
+                reader = csv.reader(f)
+                next(reader)  # Skip header
+                rows = list(reader)
+
+            for row in rows:
+                if row[0] == str(transaction_id):
+                    row[1] = str(amount)
+                    row[2] = category
+                    row[3] = date
+                    row[4] = transaction_type
+                    row[5] = description
+                    updated = True
+                    break
+
+            if updated:
+                # Rewrite the CSV with the updated data
+                with open(self.filename, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["id", "amount", "category", "date", "type", "description"])
+                    writer.writerows(rows)
+
+                # Refresh UI
+                self.load_data()
+                self.clear_form()
+                messagebox.showinfo("Success", "Transaction updated successfully!")
+
+            else:
+                messagebox.showerror("Error", "Transaction not found.")
+
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {e}")
+
+    def delete_transaction(self):
+        """Delete selected transaction"""
+        selected_item = self.tree.selection()
+        if selected_item:
+            item = self.tree.item(selected_item)
+            transaction_id = item['values'][0]
+
+            # Read data and filter out the selected transaction
+            rows = []
+            with open(self.filename, 'r') as f:
+                reader = csv.reader(f)
+                next(reader)  # Skip header
+                rows = list(reader)
+
+            # Remove the selected transaction
+            rows = [row for row in rows if row[0] != str(transaction_id)]
+
+            # Rewrite the file without the deleted transaction
+            with open(self.filename, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["id", "amount", "category", "date", "type", "description"])
+                writer.writerows(rows)
+
+            # Refresh UI
+            self.load_data()
+            messagebox.showinfo("Success", "Transaction deleted successfully!")
+
+        else:
+            messagebox.showwarning("Select a Transaction", "Please select a transaction to delete.")
+
+    def load_data(self):
+        """Load transaction data from CSV"""
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        # Retrieve data from CSV
+        with open(self.filename, 'r') as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip header
+            rows = list(reader)
+
+        # Insert into treeview
+        for row in rows:
+            self.tree.insert("", "end", values=row)
+
+        self.update_summary()
+
+    def update_summary(self):
+        """Update the financial summary based on loaded data"""
+        total_income = 0
+        total_expenses = 0
+
+        with open(self.filename, 'r') as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip header
+            rows = list(reader)
+
+        for row in rows:
+            amount = float(row[1])
+            if row[4] == 'Income':
+                total_income += amount
+            elif row[4] == 'Expense':
+                total_expenses += amount
+
+        balance = total_income - total_expenses
+
+        # Update labels
+        self.income_label.config(text=f"${total_income:,.2f}")
+        self.expense_label.config(text=f"${total_expenses:,.2f}")
+        self.balance_label.config(text=f"${balance:,.2f}")
+
+        if balance >= 0:
+            self.balance_label.configure(foreground=self.colors['success'])
+        else:
+            self.balance_label.configure(foreground=self.colors['danger'])
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = FinanceTrackerApp(root)
+    root.mainloop()
